@@ -33,6 +33,7 @@ h1{font-size:22px;line-height:1.3;margin:0}.sub{color:var(--mu);font-size:14px;m
 .ag i.g{background:var(--ok)}.ag i.a{background:#c77a00}.ag i.r{background:var(--no)}
 .ag span{text-align:right;color:var(--mu)}.ag span b{color:var(--tx)}
 @media (max-width:900px){.r3{grid-template-columns:1fr}}
+.m{font-size:11px;color:var(--mu);max-width:170px;margin-top:2px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .chip{display:inline-flex;gap:8px;align-items:center;background:var(--bg);border-radius:99px;padding:6px 12px;font-size:13px;font-weight:500}
 .chip b{background:var(--card);border-radius:99px;padding:1px 8px;font-size:12px}
@@ -77,7 +78,7 @@ td{padding:12px 8px;border-bottom:1px solid var(--bd);vertical-align:middle}
   <input id="q" placeholder="Cari organisasi / tajuk…" style="flex:1;min-width:140px">
 </div>
 <div class="card wrap"><table id="t"></table></div>
-<div class="note">Kod: &#10003; Sudah beri maklum balas &nbsp; &#10007; Tidak sokong &nbsp; &#9888; Bersyarat &nbsp; &ndash; Belum beri. Apabila semua agensi menjawab, status menjadi <b>Sedia Mesyuarat</b>.</div>
+<div class="note">Kod: &#10003; Sudah beri maklum balas &nbsp; &#10007; Tidak sokong &nbsp; &#9888; Bersyarat &nbsp; &ndash; Belum beri. <span id="rule"></span></div>
 
 </div>
 <script src="config.js"></script>
@@ -125,24 +126,27 @@ var SY=["–","✓","✗","⚠"];
 var ST={menunggu:["Menunggu Maklum Balas","var(--wa)"],sedia:["Sedia Mesyuarat","var(--ac)"],lulus:["Diluluskan","var(--ok)"],tolak:["Ditolak","var(--no)"]};
 function has(l,a){return !!l&&l.indexOf(a)>=0}
 function sv(r,a){return has(r.tidak,a)?2:has(r.bersyarat,a)?3:has(r.sudah,a)?1:0}
-function stat(r){if(r.keputusan)return r.keputusan;return AGENSI.every(function(a){return sv(r,a)>0})?"sedia":"menunggu"}
+var MINX=(typeof MINIMUM!=="undefined")?MINIMUM:8,TW=(typeof TIDAK_WAJIB!=="undefined")?TIDAK_WAJIB:["IPK","BOMBA"];
+function wm(r){return AGENSI.filter(function(a){return !has(TW,a)&&sv(r,a)===0})}
+function stat(r){if(r.keputusan)return r.keputusan;var g=AGENSI.filter(function(a){return sv(r,a)>0}).length;return (g>=MINX&&wm(r).length===0)?"sedia":"menunggu"}
 $("h").textContent=TAJUK;document.title=TAJUK;
 $("sub").innerHTML="Data dibaca daripada Google Sheets pada "+new Date().toLocaleString("ms-MY")+" &middot; <a href=\"#\" onclick=\"location.reload();return false\">Muat semula</a>";
 Object.keys(ST).forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=ST[k][0];$("fs").appendChild(o)});
 var ds=[];PERMOHONAN.forEach(function(r){if(ds.indexOf(r.daerah)<0)ds.push(r.daerah)});
 ds.forEach(function(d){var o=document.createElement("option");o.value=d;o.textContent=d;$("fa").appendChild(o)});
 function render(){
+  $("rule").textContent="Sedia Mesyuarat: sekurang-kurangnya "+MINX+"/"+AGENSI.length+" agensi sudah menjawab dan semua agensi wajib sudah menjawab. * Tidak wajib: "+TW.join(", ")+".";
   var c={menunggu:0,sedia:0,lulus:0,tolak:0},tot=PERMOHONAN.length||1;
   PERMOHONAN.forEach(function(r){c[stat(r)]++});
   $("kpi").innerHTML='<div class="card kpi"><b>'+PERMOHONAN.length+'</b><span>Jumlah permohonan</span></div>'+
    Object.keys(ST).map(function(k){return '<div class="card kpi"><b style="color:'+ST[k][1]+'">'+c[k]+'</b><span>'+ST[k][0]+'</span></div>'}).join("");
   var got=0,all=PERMOHONAN.length*AGENSI.length;PERMOHONAN.forEach(function(r){AGENSI.forEach(function(a){if(sv(r,a)>0)got++})});
   var pc=all?Math.round(got/all*100):0;$("prog").style.width=pc+"%";$("progt").textContent=got+" daripada "+all+" maklum balas diterima ("+pc+"%)";
-  $("pend").innerHTML=AGENSI.map(function(a){return {a:a,n:PERMOHONAN.filter(function(r){return !r.keputusan&&sv(r,a)===0}).length}}).sort(function(x,y){return y.n-x.n}).map(function(o){return '<span class="chip'+(o.n===0?' ok':o.n>=Math.ceil(PERMOHONAN.length*0.8)?' hot':'')+'">'+esc(o.a)+' <b>'+o.n+'</b></span>'}).join("");
+  $("pend").innerHTML=AGENSI.map(function(a){return {a:a,n:PERMOHONAN.filter(function(r){return !r.keputusan&&sv(r,a)===0}).length}}).sort(function(x,y){return y.n-x.n}).map(function(o){return '<span class="chip'+(o.n===0?' ok':(!has(TW,o.a)||o.n<Math.ceil(PERMOHONAN.length*0.8))?'':' hot')+'">'+esc(o.a)+(has(TW,o.a)?'':'*')+' <b>'+o.n+'</b></span>'}).join("");
   var tot=PERMOHONAN.length;$("agh").textContent="Peratus daripada "+tot+" permohonan yang sudah dijawab";
-  $("agl").innerHTML=AGENSI.map(function(a){var n=PERMOHONAN.filter(function(r){return sv(r,a)>0}).length;return {a:a,n:n,pc:tot?Math.round(n/tot*100):0}}).sort(function(x,y){return y.pc-x.pc}).map(function(o){return '<div class="ag"><b>'+esc(o.a)+'</b><div class="tr"><i class="'+(o.pc>=70?'g':o.pc>=40?'a':'r')+'" style="width:'+o.pc+'%"></i></div><span><b>'+o.n+'/'+tot+'</b> &middot; '+o.pc+'%</span></div>'}).join("");
+  $("agl").innerHTML=AGENSI.map(function(a){var n=PERMOHONAN.filter(function(r){return sv(r,a)>0}).length;return {a:a,n:n,pc:tot?Math.round(n/tot*100):0}}).sort(function(x,y){return y.pc-x.pc}).map(function(o){return '<div class="ag"><b>'+esc(o.a)+(has(TW,o.a)?'':'*')+'</b><div class="tr"><i class="'+(o.pc>=70?'g':o.pc>=40?'a':'r')+'" style="width:'+o.pc+'%"></i></div><span><b>'+o.n+'/'+tot+'</b> &middot; '+o.pc+'%</span></div>'}).join("");
   var fst=$("fs").value,fa=$("fa").value,q=$("q").value.toLowerCase();
-  var h='<tr><th>#</th><th>Organisasi / Tajuk Permohonan</th><th>Daerah</th>'+AGENSI.map(function(a){return '<th style="text-align:center">'+esc(a)+'</th>'}).join("")+'<th>Maklum balas</th><th>Status</th></tr>';
+  var h='<tr><th>#</th><th>Organisasi / Tajuk Permohonan</th><th>Daerah</th>'+AGENSI.map(function(a){return '<th style="text-align:center">'+esc(a)+(has(TW,a)?'*':'')+'</th>'}).join("")+'<th>Maklum balas</th><th>Status</th></tr>';
   PERMOHONAN.forEach(function(r,i){
     var s=stat(r);
     if(fst&&s!==fst)return;if(fa&&r.daerah!==fa)return;
@@ -150,7 +154,7 @@ function render(){
     var got=AGENSI.filter(function(a){return sv(r,a)>0}).length;
     h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(r.nama)+'</b>'+(r.tajuk?'<div class="tj">'+esc(r.tajuk)+'</div>':'')+'</td><td>'+esc(r.daerah)+'</td>'+
     AGENSI.map(function(a){var v=sv(r,a);return '<td class="c s'+v+'">'+SY[v]+'</td>'}).join("")+
-    '<td>'+got+'/'+AGENSI.length+'</td><td><span class="pill" style="color:'+ST[s][1]+'">'+ST[s][0]+'</span></td></tr>';
+    '<td>'+got+'/'+AGENSI.length+(!r.keputusan&&wm(r).length?'<div class="m">Menunggu: '+esc(wm(r).join(", "))+'</div>':'')+'</td><td><span class="pill" style="color:'+ST[s][1]+'">'+ST[s][0]+'</span></td></tr>';
   });
   $("t").innerHTML=h;
 }
