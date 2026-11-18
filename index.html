@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Permohonan Rumah Ibadat Bukan Islam</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mu:#657083;--bd:#e1e5ea;--ac:#1d5fd1;--ok:#17803d;--no:#c0392b;--wa:#b86e00;--gr:#8a93a3}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b212a;--tx:#e8ecf2;--mu:#98a2b3;--bd:#2c3440;--ac:#6ea0f5;--ok:#4cc27a;--no:#ef7a6c;--wa:#e6a23c;--gr:#7b8596;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+h1{font-size:20px;margin:0}.sub{color:var(--mu);font-size:13px;margin:2px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+.kpi b{display:block;font-size:26px}.kpi span{color:var(--mu);font-size:12px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--bd);margin:8px 0}
+.bar i{display:block}
+.leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mu)}.leg u{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;text-decoration:none}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 8px}
+select,input{font:inherit;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:1000px;font-size:13px}
+th,td{padding:8px 7px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:middle}
+th{color:var(--mu);font-weight:600;font-size:12px}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.c{text-align:center;min-width:34px;font-weight:700}
+.s0{color:var(--gr)}.s1{color:var(--ok)}.s2{color:var(--no)}.s3{color:var(--wa)}
+.tj{color:var(--mu);font-size:12px;margin-top:3px;min-width:260px;max-width:420px}
+.note{color:var(--mu);font-size:12px;margin-top:10px}
+#err{display:none;background:#fdecea;color:#8a1c12;border:1px solid #f5b5ae;border-radius:8px;padding:10px;margin-bottom:12px}
+@media print{.tools{display:none}table{min-width:0}body{padding:0}}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<h1 id="h"></h1>
+<div class="sub" id="sub"></div>
+<div class="grid" id="kpi"></div>
+<div class="card"><b>Carta ringkas status</b><div class="bar" id="bar"></div><div class="leg" id="leg"></div></div>
+<div class="card" style="margin-top:10px"><b>Agensi yang belum beri maklum balas</b><div class="leg" id="pend" style="margin-top:8px"></div></div>
+<div class="tools">
+  <select id="fs"><option value="">Semua status</option></select>
+  <select id="fa"><option value="">Semua daerah</option></select>
+  <input id="q" placeholder="Cari organisasi / tajuk…" style="flex:1;min-width:140px">
+</div>
+<div class="card wrap"><table id="t"></table></div>
+<div class="note">Kod: &#10003; Sudah beri maklum balas &nbsp; &#10007; Tidak sokong &nbsp; &#9888; Bersyarat &nbsp; &ndash; Belum beri. Apabila semua agensi menjawab, status menjadi <b>Sedia Mesyuarat</b>.</div>
+
+<script src="config.js"></script>
+<script>
+function $(i){return document.getElementById(i)}
+function esc(x){return String(x).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+var PERMOHONAN=[],AGENSI=[];
+function fail(m){$("err").textContent=m;$("err").style.display="block"}
+function csv(t){var R=[],r=[],f="",q=false,i=0,c;t=t.replace(/^\uFEFF/,"");
+for(;i<t.length;i++){c=t.charAt(i);
+ if(q){if(c==='"'){if(t.charAt(i+1)==='"'){f+='"';i++}else q=false}else f+=c}
+ else if(c==='"')q=true;
+ else if(c===","){r.push(f);f=""}
+ else if(c==="\n"){r.push(f);R.push(r);r=[];f=""}
+ else if(c!=="\r")f+=c}
+if(f!==""||r.length){r.push(f);R.push(r)}
+return R}
+function parse(t){
+  var R=csv(t).filter(function(r){return r.some(function(c){return c.trim()})});
+  if(R.length<2)throw 0;
+  var H=R[0].map(function(x){return x.trim()}),ki=H.length-1,j;
+  for(j=0;j<H.length;j++){if(/keputusan/i.test(H[j]))ki=j}
+  AGENSI=H.slice(4,ki).filter(function(x){return x});
+  PERMOHONAN=R.slice(1).filter(function(r){return (r[1]||"").trim()}).map(function(r){
+    var o={nama:r[1].trim(),daerah:(r[2]||"").trim(),tajuk:(r[3]||"").trim(),sudah:[],tidak:[],bersyarat:[],keputusan:""};
+    var k=(r[ki]||"").trim().toLowerCase();if(k==="lulus"||k==="tolak")o.keputusan=k;
+    for(var j=4;j<ki;j++){var v=(r[j]||"").trim().toUpperCase();if(!v||!H[j])continue;
+      if(v==="X"||v==="\u2717"||v==="TIDAK")o.tidak.push(H[j]);
+      else if(v==="S"||v==="B"||v==="\u26A0"||v==="SYARAT")o.bersyarat.push(H[j]);
+      else o.sudah.push(H[j])}
+    return o});
+}
+function load(){
+  if(typeof SHEET_URL==="undefined"){fail("Fail config.js tidak dapat dibaca. Semak: (1) config.js ada di GitHub bersama index.html, (2) pautan berada di antara tanda petikan \" \" dan baris berakhir dengan ;");return}
+  SHEET_URL=SHEET_URL.trim();
+  if(SHEET_URL.indexOf("TAMPAL")===0){fail("Pautan Google Sheets belum diisi dalam config.js.");return}
+  if(SHEET_URL.indexOf("https://docs.google.com/")!==0){fail("Pautan dalam config.js bukan pautan Google Sheets. Ia mesti bermula dengan https://docs.google.com/ dan diambil daripada Publish to web (CSV).");return}
+  fetch(SHEET_URL+(SHEET_URL.indexOf("?")<0?"?":"&")+"t="+Date.now()).then(function(r){if(!r.ok)throw 0;return r.text()})
+  .then(function(t){parse(t);start()})
+  .catch(function(){fail("Data tidak dapat dibaca daripada Google Sheets. Semak pautan dalam config.js dan pastikan helaian sudah di-Publish to web (format CSV).")});
+}
+load();
+function start(){
+var SY=["–","✓","✗","⚠"];
+var ST={menunggu:["Menunggu Maklum Balas","var(--wa)"],sedia:["Sedia Mesyuarat","var(--ac)"],lulus:["Diluluskan","var(--ok)"],tolak:["Ditolak","var(--no)"]};
+function has(l,a){return !!l&&l.indexOf(a)>=0}
+function sv(r,a){return has(r.tidak,a)?2:has(r.bersyarat,a)?3:has(r.sudah,a)?1:0}
+function stat(r){if(r.keputusan)return r.keputusan;return AGENSI.every(function(a){return sv(r,a)>0})?"sedia":"menunggu"}
+$("h").textContent=TAJUK;document.title=TAJUK;
+$("sub").innerHTML="Data dibaca daripada Google Sheets pada "+new Date().toLocaleString("ms-MY")+" &middot; <a href=\"#\" onclick=\"location.reload();return false\">Muat semula</a>";
+Object.keys(ST).forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=ST[k][0];$("fs").appendChild(o)});
+var ds=[];PERMOHONAN.forEach(function(r){if(ds.indexOf(r.daerah)<0)ds.push(r.daerah)});
+ds.forEach(function(d){var o=document.createElement("option");o.value=d;o.textContent=d;$("fa").appendChild(o)});
+function render(){
+  var c={menunggu:0,sedia:0,lulus:0,tolak:0},tot=PERMOHONAN.length||1;
+  PERMOHONAN.forEach(function(r){c[stat(r)]++});
+  $("kpi").innerHTML='<div class="card kpi"><b>'+PERMOHONAN.length+'</b><span>Jumlah permohonan</span></div>'+
+   Object.keys(ST).map(function(k){return '<div class="card kpi"><b style="color:'+ST[k][1]+'">'+c[k]+'</b><span>'+ST[k][0]+'</span></div>'}).join("");
+  $("bar").innerHTML=Object.keys(ST).map(function(k){return '<i style="width:'+(c[k]/tot*100)+'%;background:'+ST[k][1]+'"></i>'}).join("");
+  $("leg").innerHTML=Object.keys(ST).map(function(k){return '<span><u style="background:'+ST[k][1]+'"></u>'+ST[k][0]+' ('+c[k]+')</span>'}).join("");
+  $("pend").innerHTML=AGENSI.map(function(a){var n=PERMOHONAN.filter(function(r){return !r.keputusan&&sv(r,a)===0}).length;return '<span><b style="color:'+(n?'var(--wa)':'var(--ok)')+'">'+esc(a)+'</b>: '+n+' permohonan</span>'}).join("");
+  var fst=$("fs").value,fa=$("fa").value,q=$("q").value.toLowerCase();
+  var h='<tr><th>#</th><th>Organisasi / Tajuk Permohonan</th><th>Daerah</th>'+AGENSI.map(function(a){return '<th style="text-align:center">'+esc(a)+'</th>'}).join("")+'<th>Maklum balas</th><th>Status</th></tr>';
+  PERMOHONAN.forEach(function(r,i){
+    var s=stat(r);
+    if(fst&&s!==fst)return;if(fa&&r.daerah!==fa)return;
+    if(q&&(r.nama+" "+(r.tajuk||"")).toLowerCase().indexOf(q)<0)return;
+    var got=AGENSI.filter(function(a){return sv(r,a)>0}).length;
+    h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(r.nama)+'</b>'+(r.tajuk?'<div class="tj">'+esc(r.tajuk)+'</div>':'')+'</td><td>'+esc(r.daerah)+'</td>'+
+    AGENSI.map(function(a){var v=sv(r,a);return '<td class="c s'+v+'">'+SY[v]+'</td>'}).join("")+
+    '<td>'+got+'/'+AGENSI.length+'</td><td><span class="pill" style="color:'+ST[s][1]+'">'+ST[s][0]+'</span></td></tr>';
+  });
+  $("t").innerHTML=h;
+}
+["fs","fa"].forEach(function(i){$(i).onchange=render});$("q").oninput=render;
+render();
+}
+</script>
+</body>
+</html>
